@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Repository Health Dashboard</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: #f1f5f9;
+    color: #1e293b;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  a { color: inherit; text-decoration: none; }
+
+  .container { max-width: 1600px; margin: 0 auto; padding: 24px; }
+
+  /* ── Header ── */
+  header { margin-bottom: 20px; }
+  header h1 { font-size: 22px; font-weight: 700; color: #0f172a; }
+  header p  { color: #64748b; font-size: 13px; margin-top: 3px; }
+
+  /* ── Status cards ── */
+  .cards { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+  .card {
+    background: #fff;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: border-color .15s, box-shadow .15s;
+    user-select: none;
+  }
+  .card:hover  { border-color: #94a3b8; box-shadow: 0 1px 4px rgba(0,0,0,.07); }
+  .card.on     { box-shadow: 0 0 0 2px rgba(59,130,246,.2); }
+  .card-dot    { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .card-count  { font-size: 20px; font-weight: 700; line-height: 1; }
+  .card-label  { font-size: 11px; color: #64748b; white-space: nowrap; line-height: 1.2; }
+
+  /* ── Toolbar ── */
+  .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+  .search {
+    padding: 7px 11px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 13px;
+    width: 260px;
+    outline: none;
+    background: #fff;
+  }
+  .search:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,.15); }
+  .btn { padding: 7px 13px; background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; cursor: pointer; color: #475569; }
+  .btn:hover { background: #f8fafc; }
+  .count { margin-left: auto; color: #64748b; font-size: 13px; }
+
+  /* ── Main table ── */
+  .tbl-wrap { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  .tbl-wrap table { white-space: nowrap; }
+
+  th {
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 9px 13px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    cursor: pointer;
+    user-select: none;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  th:hover       { color: #1e293b; background: #f1f5f9; }
+  th.sorted      { color: #3b82f6; }
+  th .arr        { margin-left: 3px; opacity: .4; font-style: normal; }
+  th.sorted .arr { opacity: 1; }
+  th.r           { text-align: right; }
+
+  td { padding: 9px 13px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+  td.r { text-align: right; font-variant-numeric: tabular-nums; }
+  tr:last-child > td { border-bottom: 0; }
+  tr.repo:hover td   { background: #f8fafc; cursor: pointer; }
+  tr.detail td       { padding: 0; background: #fafafa; }
+  tr.detail.hide     { display: none; }
+
+  /* ── Badges ── */
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 10px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .dot   { width: 6px; height: 6px; border-radius: 50%; }
+
+  /* ── Score bar ── */
+  .sbar     { display: flex; align-items: center; gap: 7px; justify-content: flex-end; }
+  .bar-wrap { width: 36px; height: 3px; background: #e2e8f0; border-radius: 2px; flex-shrink: 0; }
+  .bar      { height: 100%; border-radius: 2px; }
+
+  /* ── Stale PRs ── */
+  .stale-ok   { color: #94a3b8; }
+  .stale-warn { color: #d97706; font-weight: 600; }
+  .stale-bad  { color: #dc2626; font-weight: 600; }
+
+  /* ── Repo link / category chip ── */
+  .rlink          { font-weight: 500; color: #1e293b; }
+  .rlink:hover    { color: #3b82f6; text-decoration: underline; }
+  .cat            { font-size: 11px; color: #64748b; background: #f1f5f9; padding: 2px 7px; border-radius: 4px; }
+
+  /* ── Row breakdown panel ── */
+  .bd      { padding: 16px 20px; }
+  .bd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+  .bd-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 11px; }
+  .bd-card h4 {
+    font-size: 10px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    margin-bottom: 7px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .bd-card h4 span { font-size: 13px; font-weight: 700; text-transform: none; letter-spacing: 0; }
+  .bd-item   { display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0; color: #64748b; }
+  .bd-item b { font-weight: 600; color: #1e293b; }
+  .bd-wide   { grid-column: 1 / -1; }
+  .bd-raw    { columns: 3; gap: 20px; }
+
+  /* ── Legend ── */
+  .legend    { margin-top: 28px; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 22px; }
+  .legend h2 { font-size: 15px; font-weight: 700; margin-bottom: 14px; }
+  .legend h3 { font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .05em; margin: 16px 0 8px; }
+  .legend p  { color: #475569; line-height: 1.6; margin-bottom: 10px; }
+  .legend ul { padding-left: 20px; color: #475569; line-height: 1.8; margin-bottom: 20px; }
+
+  .lg-table { width: 100%; border-collapse: collapse; font-size: 13px; white-space: normal; margin-bottom: 20px; }
+  .lg-table th { text-align: left; padding: 6px 10px; color: #64748b; font-weight: 600; border-bottom: 1px solid #e2e8f0; font-size: 11px; white-space: nowrap; }
+  .lg-table td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; color: #475569; vertical-align: top; line-height: 1.5; }
+  .lg-table td:first-child                    { white-space: nowrap; width: 1%; padding-right: 16px; }
+  .lg-table td:nth-child(2):not(:last-child)  { white-space: nowrap; width: 1%; padding-right: 16px; }
+  .lg-table tr:last-child td { border-bottom: 0; }
+
+  .code { background: #f1f5f9; padding: 1px 5px; border-radius: 3px; font-family: monospace; font-size: 12px; }
+  .legend pre {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: #1e293b;
+    overflow-x: auto;
+    margin-top: 8px;
+  }
+
+  footer { margin-top: 20px; text-align: center; color: #94a3b8; font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>Repository Health Dashboard</h1>
+    <p>Generated {{ generated }}</p>
+  </header>
+
+  <div class="cards" id="cards"></div>
+
+  <div class="toolbar">
+    <input class="search" id="search" type="text" placeholder="Search repos…" autocomplete="off">
+    <button class="btn" id="clear-btn">Clear filters</button>
+    <span class="count" id="count"></span>
+  </div>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th data-col="repo">Repository<i class="arr">↕</i></th>
+          <th data-col="category">Category<i class="arr">↕</i></th>
+          <th data-col="status">Status<i class="arr">↕</i></th>
+          <th data-col="health_score" class="r sorted">Health<i class="arr">↓</i></th>
+          <th data-col="activity" class="r">Activity<i class="arr">↕</i></th>
+          <th data-col="maintenance" class="r">Maint.<i class="arr">↕</i></th>
+          <th data-col="adoption" class="r">Adoption<i class="arr">↕</i></th>
+          <th data-col="resilience" class="r">Resilience<i class="arr">↕</i></th>
+          <th data-col="hygiene" class="r">Hygiene<i class="arr">↕</i></th>
+          <th data-col="lifecycle" class="r">Lifecycle<i class="arr">↕</i></th>
+          <th data-col="contributors" class="r">Contrib.<i class="arr">↕</i></th>
+          <th data-col="commits_90d" class="r">Commits 90d<i class="arr">↕</i></th>
+          <th data-col="prs_merged" class="r">PRs merged<i class="arr">↕</i></th>
+          <th data-col="stale_prs" class="r">Stale PRs<i class="arr">↕</i></th>
+          <th data-col="push_age" class="r">Push age (d)<i class="arr">↕</i></th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <div class="legend">
+    <h2>How this report works</h2>
+    <p>
+      The <strong>Health score</strong> (0–100) combines five independent dimensions.
+      Use the sub-scores to understand <em>why</em> a repo has a given total — a repo
+      can score poorly overall for very different reasons.
+    </p>
+    <p>The model is designed to avoid two common mistakes:</p>
+    <ul>
+      <li><strong>Calling a stable, quiet repo unhealthy</strong> — a mature library or infrastructure module may have very few commits and still be in excellent shape.</li>
+      <li><strong>Missing actively-used but fragile repos</strong> — work can be happening while only one or two people understand the codebase.</li>
+    </ul>
+
+    <h3>Score dimensions</h3>
+    <table class="lg-table">
+      <tr><th>Dimension</th><th>Max</th><th>What it measures</th></tr>
+      <tr>
+        <td><strong>Health</strong></td><td>100</td>
+        <td>Combined score across all dimensions. Use for ranking repos, not as a precise grade.</td>
+      </tr>
+      <tr>
+        <td><strong>Activity</strong></td><td>35</td>
+        <td>Is work actually happening? Counts commits, PRs merged, and issue activity in the last 90 days, weighted by how recently code was pushed.</td>
+      </tr>
+      <tr>
+        <td><strong>Maintenance</strong></td><td>25</td>
+        <td>Is the team keeping up with the work? Measures PR merge ratio, issue close rate, time since last release, and CI run health. A repo can be very active and still score poorly here if PRs pile up unreviewed. Penalised for stale open PRs (no activity &gt;30 days).</td>
+      </tr>
+      <tr>
+        <td><strong>Adoption</strong></td><td>10</td>
+        <td>Is anyone using this? Counts unique clones and page views over the last 14 days. Intentionally low-weighted — many critical internal repos are used by a small, stable audience and would score low here even when healthy.</td>
+      </tr>
+      <tr>
+        <td><strong>Resilience</strong></td><td>20</td>
+        <td>What happens if one person leaves? Measures how many distinct people committed in the last 180 days and what share of those commits came from the top one or two contributors. A repo where one person wrote 90% of the recent commits is fragile, even if otherwise active.</td>
+      </tr>
+      <tr>
+        <td><strong>Hygiene</strong></td><td>10</td>
+        <td>Are ownership signals in place? Checks for README (+2), LICENSE (+2), CONTRIBUTING guide (+1), branch protection (+3), and CODEOWNERS (+2). These are intentional signals that someone is looking after the repo.</td>
+      </tr>
+      <tr>
+        <td><strong>Lifecycle</strong></td><td>+10 / -20</td>
+        <td>Is quietness expected? A correction factor based on repo category (libraries and infrastructure are expected to be low-churn). Also subtracts points when a repo shows no activity and no release for over a year, and adds points when a recent release exists despite low commit activity.</td>
+      </tr>
+    </table>
+
+    <h3>Raw metric columns</h3>
+    <table class="lg-table">
+      <tr><th>Column</th><th>What it counts</th></tr>
+      <tr><td><strong>Contributors</strong></td><td>Distinct people who committed to the default branch in the last 180 days.</td></tr>
+      <tr><td><strong>Commits 90d</strong></td><td>Total commits on the default branch in the last 90 days.</td></tr>
+      <tr><td><strong>PRs merged</strong></td><td>Pull requests merged into the default branch in the last 90 days.</td></tr>
+      <tr><td><strong>Stale PRs</strong></td><td>Open PRs with no activity (no comments, reviews, or commits) for more than 30 days. Used to penalise the Maintenance score.</td></tr>
+      <tr><td><strong>Push age (d)</strong></td><td>Days since the last push to any branch. Low values mean recent activity; high values can indicate dormancy.</td></tr>
+    </table>
+
+    <h3>Status labels and what to do</h3>
+    <table class="lg-table">
+      <tr><th>Status</th><th>Meaning</th><th>Suggested action</th></tr>
+      <tr>
+        <td><span id="lg-active"></span></td>
+        <td>Regular commits, PRs, and maintenance. Health ≥ 70 and Activity ≥ 20.</td>
+        <td>No action needed.</td>
+      </tr>
+      <tr>
+        <td><span id="lg-stable"></span></td>
+        <td>Low churn but well maintained. Health ≥ 55. Normal for mature libraries and infra repos.</td>
+        <td>Review periodically. Confirm that quietness is intentional.</td>
+      </tr>
+      <tr>
+        <td><span id="lg-at_risk"></span></td>
+        <td>Work is happening, but the repo depends on too few people, or maintenance is falling behind.</td>
+        <td>Spread knowledge — assign a second maintainer. Review the open PR and issue backlog.</td>
+      </tr>
+      <tr>
+        <td><span id="lg-dormant"></span></td>
+        <td>Little meaningful activity for 90–180 days.</td>
+        <td>Decide: is this intentional? If yes, set the correct category. If no, assign a named owner.</td>
+      </tr>
+      <tr>
+        <td><span id="lg-likely_abandoned"></span></td>
+        <td>No meaningful activity for 180+ days, no recent release, low adoption.</td>
+        <td>Schedule a decision: archive, deprecate, or hand off. Do not leave it in an undefined state.</td>
+      </tr>
+      <tr>
+        <td><span id="lg-archived"></span></td>
+        <td>Explicitly archived on GitHub.</td>
+        <td>No action needed. Confirm that downstream consumers are aware.</td>
+      </tr>
+    </table>
+
+    <h3>A note on repo categories</h3>
+    <p>
+      The <strong>Category</strong> column defaults to <span class="code">unknown</span>.
+      Setting it correctly matters — a healthy-but-quiet infrastructure repo will look
+      dormant if it is left as <span class="code">unknown</span>.
+    </p>
+    <table class="lg-table">
+      <tr><th>Category</th><th>Score adjustment</th><th>Use for</th></tr>
+      <tr><td><span class="code">product</span></td>       <td>0</td>   <td>User-facing services and applications</td></tr>
+      <tr><td><span class="code">library</span></td>       <td>+5</td>  <td>Shared libraries, SDKs, internal packages</td></tr>
+      <tr><td><span class="code">infrastructure</span></td><td>+5</td>  <td>Terraform, Helm, Ansible, and other IaC repos</td></tr>
+      <tr><td><span class="code">documentation</span></td> <td>+10</td> <td>Docs-only repos</td></tr>
+      <tr><td><span class="code">template</span></td>      <td>+10</td> <td>Scaffold and starter repos</td></tr>
+      <tr><td><span class="code">experiment</span></td>    <td>+10</td> <td>POCs, sandboxes, throwaway repos</td></tr>
+      <tr><td><span class="code">unknown</span></td>       <td>0</td>   <td>Default — update this when possible</td></tr>
+    </table>
+    <p>Set a category in your <span class="code">targets.yaml</span>, or ad-hoc:</p>
+    <pre>./run.sh --repo owner/my-infra-repo --category infrastructure</pre>
+  </div>
+
+  <footer>Generated by Zejnilovic/github-repo-health &nbsp;·&nbsp; {{ generated }}</footer>
+
+</div>
+<script type="application/json" id="repo-data">{{ data_json | safe }}</script>
+<script>
+const REPOS = JSON.parse(document.getElementById('repo-data').textContent);
+
+const STATUS = {
+  active:           { color: '#16a34a', bg: '#dcfce7', label: 'Active' },
+  stable:           { color: '#0284c7', bg: '#e0f2fe', label: 'Stable' },
+  at_risk:          { color: '#d97706', bg: '#fef3c7', label: 'At Risk' },
+  dormant:          { color: '#7c3aed', bg: '#f3e8ff', label: 'Dormant' },
+  likely_abandoned: { color: '#dc2626', bg: '#fee2e2', label: 'Abandoned' },
+  archived:         { color: '#6b7280', bg: '#f3f4f6', label: 'Archived' },
+};
+
+const MAXES = { health_score: 100, activity: 35, maintenance: 25, adoption: 10, resilience: 20, hygiene: 10 };
+
+let state = { sort: 'health_score', dir: 'desc', status: 'all', q: '' };
+
+// ── Data accessors ────────────────────────────────────────────────────────────
+
+function gv(r, col) {
+  const s = r.scores || {}, raw = r.raw || {};
+  switch (col) {
+    case 'repo':         return r.repo;
+    case 'category':     return r.category || '';
+    case 'status':       return r.status;
+    case 'health_score': return r.health_score;
+    case 'activity':     return s.activity ?? 0;
+    case 'maintenance':  return s.maintenance ?? 0;
+    case 'adoption':     return s.adoption ?? 0;
+    case 'resilience':   return s.resilience ?? 0;
+    case 'hygiene':      return s.hygiene ?? 0;
+    case 'lifecycle':    return s.lifecycle_modifier ?? 0;
+    case 'contributors': return raw.contributors_180d ?? 0;
+    case 'commits_90d':  return raw.commits_90d ?? 0;
+    case 'prs_merged':   return raw.prs_merged_90d ?? 0;
+    case 'stale_prs':    return raw.stale_prs_30d ?? 0;
+    case 'push_age':     return raw.days_since_last_push ?? 0;
+    default:             return 0;
+  }
+}
+
+// ── Rendering helpers ─────────────────────────────────────────────────────────
+
+function scColor(v, max) {
+  const p = max ? v / max : 0;
+  return p >= 0.7 ? '#16a34a' : p >= 0.4 ? '#d97706' : '#dc2626';
+}
+
+function sbar(v, max) {
+  if (max == null) return v;
+  const pct = Math.min(100, max ? v / max * 100 : 0);
+  const col = scColor(v, max);
+  return `<div class="sbar">
+    <span>${v}</span>
+    <div class="bar-wrap"><div class="bar" style="width:${pct}%;background:${col}"></div></div>
+  </div>`;
+}
+
+function badge(status) {
+  const s = STATUS[status] || { color: '#6b7280', bg: '#f3f4f6', label: status };
+  return `<span class="badge" style="color:${s.color};background:${s.bg}">
+    <span class="dot" style="background:${s.color}"></span>${s.label}
+  </span>`;
+}
+
+function staleCls(n) {
+  return n >= 6 ? 'stale-bad' : n >= 1 ? 'stale-warn' : 'stale-ok';
+}
+
+// ── Breakdown panel ───────────────────────────────────────────────────────────
+
+function bdHTML(r) {
+  const s = r.scores || {}, b = r.breakdown || {}, raw = r.raw || {};
+
+  const dims = [
+    { name: 'Activity',    score: s.activity,          max: 35,   items: b.activity },
+    { name: 'Maintenance', score: s.maintenance,        max: 25,   items: b.maintenance },
+    { name: 'Adoption',    score: s.adoption,           max: 10,   items: b.adoption },
+    { name: 'Resilience',  score: s.resilience,         max: 20,   items: b.resilience },
+    { name: 'Hygiene',     score: s.hygiene,            max: 10,   items: b.hygiene },
+    { name: 'Lifecycle',   score: s.lifecycle_modifier, max: null, items: b.lifecycle },
+  ];
+
+  const dimCards = dims.map(d => {
+    const sc = d.score ?? 0;
+    const col = d.max != null ? scColor(sc, d.max) : '#64748b';
+    const scoreStr = d.max != null ? `${sc} / ${d.max}` : (sc > 0 ? '+' + sc : sc);
+    const items = Object.entries(d.items || {})
+      .filter(([k]) => k !== 'notes')
+      .map(([k, v]) => {
+        const disp = typeof v === 'number' ? (v > 0 ? '+' + v : v) : v;
+        return `<div class="bd-item"><span>${k.replace(/_/g, ' ')}</span><b>${disp}</b></div>`;
+      }).join('');
+    return `<div class="bd-card">
+      <h4>${d.name}<span style="color:${col}">${scoreStr}</span></h4>
+      ${items}
+    </div>`;
+  }).join('');
+
+  const hygieneChecks = [
+    ['README',            raw.has_readme],
+    ['License',           raw.has_license],
+    ['Contributing guide',raw.has_contributing],
+    ['Branch protection', raw.branch_protected],
+    ['CODEOWNERS',        raw.has_codeowners],
+  ].map(([k, v]) =>
+    `<div class="bd-item">
+      <span>${k}</span>
+      <b style="color:${v ? '#16a34a' : '#dc2626'}">${v ? '✓' : '✗'}</b>
+    </div>`
+  ).join('');
+
+  const rawMetrics = [
+    ['Days since push',   raw.days_since_last_push],
+    ['Commits 30d',       raw.commits_30d],
+    ['Commits 90d',       raw.commits_90d],
+    ['Commits 180d',      raw.commits_180d],
+    ['Contributors 90d',  raw.contributors_90d],
+    ['Contributors 180d', raw.contributors_180d],
+    ['Top-1 commit share', raw.top1_commit_share_180d != null ? (raw.top1_commit_share_180d * 100).toFixed(0) + '%' : '-'],
+    ['Top-2 commit share', raw.top2_commit_share_180d != null ? (raw.top2_commit_share_180d * 100).toFixed(0) + '%' : '-'],
+    ['PRs opened 90d',    raw.prs_opened_90d],
+    ['PRs merged 90d',    raw.prs_merged_90d],
+    ['Stale PRs (>30d)',  raw.stale_prs_30d],
+    ['Issues opened 90d', raw.issues_opened_90d],
+    ['Issues closed 90d', raw.issues_closed_90d],
+    ['Days since release', raw.days_since_last_release === -1 ? 'No release' : raw.days_since_last_release],
+    ['Unique clones 14d', raw.unique_clones_14d],
+    ['Unique views 14d',  raw.unique_views_14d],
+    ['Workflow runs (ok)', raw.recent_successful_runs],
+  ]
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `<div class="bd-item"><span>${k}</span><b>${v}</b></div>`)
+    .join('');
+
+  return `<div class="bd">
+    <div class="bd-grid">
+      ${dimCards}
+      <div class="bd-card"><h4>Hygiene detail</h4>${hygieneChecks}</div>
+      <div class="bd-card bd-wide"><h4>All raw metrics</h4><div class="bd-raw">${rawMetrics}</div></div>
+    </div>
+  </div>`;
+}
+
+// ── Table rendering ───────────────────────────────────────────────────────────
+
+function filteredSorted() {
+  let data = REPOS.slice();
+  if (state.q) {
+    const q = state.q.toLowerCase();
+    data = data.filter(r => r.repo.toLowerCase().includes(q));
+  }
+  if (state.status !== 'all') {
+    data = data.filter(r => r.status === state.status);
+  }
+  data.sort((a, b) => {
+    let av = gv(a, state.sort), bv = gv(b, state.sort);
+    if (typeof av === 'string') av = av.toLowerCase();
+    if (typeof bv === 'string') bv = bv.toLowerCase();
+    if (av < bv) return state.dir === 'asc' ? -1 : 1;
+    if (av > bv) return state.dir === 'asc' ?  1 : -1;
+    return 0;
+  });
+  return data;
+}
+
+function render() {
+  const data  = filteredSorted();
+  const tbody = document.getElementById('tbody');
+
+  tbody.innerHTML = data.map((r, i) => {
+    const ghUrl = `https://github.com/${r.repo}`;
+    const lc    = gv(r, 'lifecycle');
+    const lcStr = (lc > 0 ? '+' : '') + lc;
+    const lcCol = lc > 0 ? '#16a34a' : lc < 0 ? '#dc2626' : '#64748b';
+    const sp    = gv(r, 'stale_prs');
+
+    return `
+      <tr class="repo" data-i="${i}">
+        <td><a class="rlink" href="${ghUrl}" target="_blank" onclick="event.stopPropagation()">${r.repo}</a></td>
+        <td><span class="cat">${r.category || 'unknown'}</span></td>
+        <td>${badge(r.status)}</td>
+        <td class="r">${sbar(gv(r, 'health_score'), 100)}</td>
+        <td class="r">${sbar(gv(r, 'activity'),     35)}</td>
+        <td class="r">${sbar(gv(r, 'maintenance'),  25)}</td>
+        <td class="r">${sbar(gv(r, 'adoption'),     10)}</td>
+        <td class="r">${sbar(gv(r, 'resilience'),   20)}</td>
+        <td class="r">${sbar(gv(r, 'hygiene'),      10)}</td>
+        <td class="r"><span style="color:${lcCol};font-weight:600">${lcStr}</span></td>
+        <td class="r">${gv(r, 'contributors')}</td>
+        <td class="r">${gv(r, 'commits_90d')}</td>
+        <td class="r">${gv(r, 'prs_merged')}</td>
+        <td class="r"><span class="${staleCls(sp)}">${sp}</span></td>
+        <td class="r">${gv(r, 'push_age')}</td>
+      </tr>
+      <tr class="detail hide" data-for="${i}">
+        <td colspan="15">${bdHTML(r)}</td>
+      </tr>`;
+  }).join('');
+
+  tbody.querySelectorAll('tr.repo').forEach(row => {
+    row.addEventListener('click', () => {
+      tbody.querySelector(`tr.detail[data-for="${row.dataset.i}"]`).classList.toggle('hide');
+    });
+  });
+
+  document.getElementById('count').textContent =
+    `Showing ${data.length} of ${REPOS.length} repos`;
+}
+
+function updateHeaders() {
+  document.querySelectorAll('th[data-col]').forEach(th => {
+    const col = th.dataset.col;
+    const arr = th.querySelector('.arr');
+    if (col === state.sort) {
+      th.classList.add('sorted');
+      if (arr) arr.textContent = state.dir === 'asc' ? '↑' : '↓';
+    } else {
+      th.classList.remove('sorted');
+      if (arr) arr.textContent = '↕';
+    }
+  });
+}
+
+// ── Status cards ──────────────────────────────────────────────────────────────
+
+function buildCards() {
+  const counts = { all: REPOS.length };
+  REPOS.forEach(r => { counts[r.status] = (counts[r.status] || 0) + 1; });
+
+  const order = ['all', 'active', 'stable', 'at_risk', 'dormant', 'likely_abandoned', 'archived'];
+  const wrap  = document.getElementById('cards');
+
+  order.forEach(k => {
+    if (!counts[k]) return;
+    const s     = STATUS[k] || { color: '#64748b', bg: '#f3f4f6', label: 'All' };
+    const color = k === 'all' ? '#3b82f6' : s.color;
+    const div   = document.createElement('div');
+    div.className   = 'card' + (k === state.status ? ' on' : '');
+    div.dataset.status = k;
+    div.innerHTML = `
+      <span class="card-dot"   style="background:${color}"></span>
+      <span class="card-count" style="color:${color}">${counts[k]}</span>
+      <span class="card-label">${k === 'all' ? 'All repos' : (STATUS[k] || { label: k }).label}</span>`;
+    div.addEventListener('click', () => {
+      state.status = k;
+      document.querySelectorAll('.card').forEach(c => c.classList.toggle('on', c.dataset.status === k));
+      render();
+    });
+    wrap.appendChild(div);
+  });
+}
+
+function buildLegendBadges() {
+  Object.keys(STATUS).forEach(k => {
+    const el = document.getElementById('lg-' + k);
+    if (el) el.outerHTML = `<span>${badge(k)}</span>`;
+  });
+}
+
+// ── Event wiring ──────────────────────────────────────────────────────────────
+
+document.querySelectorAll('th[data-col]').forEach(th => {
+  th.addEventListener('click', () => {
+    const col = th.dataset.col;
+    if (state.sort === col) {
+      state.dir = state.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      state.sort = col;
+      state.dir  = 'desc';
+    }
+    updateHeaders();
+    render();
+  });
+});
+
+document.getElementById('search').addEventListener('input', e => {
+  state.q = e.target.value;
+  render();
+});
+
+document.getElementById('clear-btn').addEventListener('click', () => {
+  state.q = '';
+  state.status = 'all';
+  document.getElementById('search').value = '';
+  document.querySelectorAll('.card').forEach(c => c.classList.toggle('on', c.dataset.status === 'all'));
+  render();
+});
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+
+buildCards();
+buildLegendBadges();
+updateHeaders();
+render();
+</script>
+</body>
+</html>

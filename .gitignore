@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.env
+
+# Generated output - contains potentially sensitive org data
+data/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Local targets file (contains your org names and repo patterns - not shared)
+targets.yaml
+targets_*.yaml
+
+# Claude Code
+.claude/

@@ -1,0 +1,43 @@
+# config.yaml - Repo Health scoring configuration.
+# Controls how scores are calculated and what thresholds determine status labels.
+# All sections are optional; built-in defaults apply when omitted.
+# Requires: pip install pyyaml
+
+# ─── Category lifecycle modifiers ────────────────────────────────────────────
+# Added to the health score for repos in each category.
+# Accounts for the fact that some repo types are expected to be quiet.
+category_modifiers:
+  product:        0
+  library:        5
+  infrastructure: 5
+  documentation: 10
+  template:      10
+  experiment:    10
+  unknown:        0
+
+# ─── Status thresholds ───────────────────────────────────────────────────────
+# Tune these to match what "healthy" means in your organisation.
+status_thresholds:
+  active:
+    min_health_score:   70   # health must be at least this
+    min_activity_score: 20   # AND activity must be at least this
+  stable:
+    min_health_score:   55
+  dormant:
+    min_days_since_push: 90  # push_age > this AND health < max below
+    max_health_score:    40
+  abandoned:
+    min_days_since_push: 180
+    max_health_score:    25
+
+# ─── Stale PR penalty tiers ──────────────────────────────────────────────────
+# Points subtracted from the Maintenance score per tier.
+# A "stale PR" is open for more than 30 days with no activity.
+scoring:
+  stale_pr_thresholds:
+    - count: 6
+      penalty: 6
+    - count: 3
+      penalty: 4
+    - count: 1
+      penalty: 2

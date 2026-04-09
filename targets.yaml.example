@@ -1,0 +1,39 @@
+# targets.yaml - What to scan.
+#
+# Each target is an org or a list of repos to collect health metrics for.
+# Targets are run in order and combined into a single report.
+#
+# Run all targets:
+#   ./run.sh
+#
+# Run a single named target:
+#   ./run.sh --target "My Org"
+#
+# Use a different targets file:
+#   ./run.sh --targets path/to/other-targets.yaml
+
+targets:
+  - name: "My Organisation"
+    org: my-org
+    exclude: fork,archived # optional: skip forks, archived, or empty repos
+    ignore:
+      - "my-org/mirror-*"
+      - "my-org/generated-*"
+    categories:
+      - match: "my-org/frontend-*"
+        category: product
+      - match: "my-org/infra-*"
+        category: infrastructure
+      - match: "my-org/shared-*"
+        category: library
+
+  # Scan specific repos from any org or mix of orgs
+  # - name: "Tracked external libraries"
+  #   repos:
+  #     - partner/some-lib
+  #     - another-org/their-sdk
+  #   categories:
+  #     - match: "partner/*"
+  #       category: library
+  #     - match: "another-org/*"
+  #       category: library
